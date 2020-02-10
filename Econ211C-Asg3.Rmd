@@ -1,0 +1,221 @@
+---
+title: "Problem Set 3, Econ 211C"
+author: "Swati Sharma"
+output:
+  pdf_document: default
+  html_document: default
+  html_notebook: default
+---
+
+# Question 1
+
+Consider the $ARMA(1,1)$ process
+\begin{align}
+  Y_t & = 3.2 + 0.86 Y_{t-1} + \varepsilon_t - 1.4 \varepsilon_{t-1}, \,\, \varepsilon_t \sim WN(0,1).
+\end{align}
+Simulate $n=1010$ observations of this process.
+
+#### Solution:
+
+```{r results='hide'}
+n = 1010
+cc = 3.2
+phi = 0.86
+theta = -1.4
+eps = rnorm(n,0,1)
+y = rep(NA,n)
+y[1] = cc + phi*cc/(1-phi)
+for(i in 2:n){
+  y[i] = cc + phi*y[i-1] + eps[i] + theta*eps[i-1]
+}
+```
+
+```{r}
+plot.ts(y[1:100],  main = paste("First 100 simulated values of the ARMA(1,1)"), ylab = "Y")
+```
+
+### a. (10 points)
+Use the first 1000 observations from your simulation to estimate an $ARMA(1,1)$ model. Feel free to use the `arima` function. Report your parameter estimates with standard errors and the variance of the residuals. Use your the parameter estimates to compute and report forecasts for $s=1,\ldots,10$. Do not use any pre-packaged functions in `R` -- compute and report the forecasts using basic mathematical operations.
+
+#### Solution:
+
+```{r}
+arma11Est = arima(y[1:1000],order=c(1,0,1))
+cat("Parameter Estimates: \n")
+arma11Est$coef
+cat("\n", "Standard Errors: \n")
+sqrt(diag(arma11Est$var.coef))
+cat("\n", "Variance of Residuals:", var(arma11Est$residuals))
+
+```
+
+```{r results='hide'}
+steps = 10
+muHat = arma11Est$coef[3]
+phiHat = arma11Est$coef[1]
+thetaHat = arma11Est$coef[2]
+yHat = rep(NA,steps)
+yHat[1] =  muHat + phiHat*(y[1000]-muHat) + thetaHat*eps[1000]
+for(s in 2:steps){
+  yHat[s] = muHat + phiHat*(yHat[s-1]-muHat)
+}
+```
+
+```{r}
+cat("Forecast: \n", yHat)
+```
+
+
+### b. (10 points)
+Estimate an $AR(1)$ model using the first 1000 observations from your simulation. Do not use the `arima` function or any other pre-packaged function. Instead, compute the esimates with matrix operations. Use the parameter estimates to compute and report forecasts for $s=1,\ldots,10$. Do not use any pre-packaged functions in `R` -- compute and report the forecasts using basic mathematical operations.
+
+#### Solution:
+
+```{r}
+Y = y[1:(n-10)] ## first 1000 simulated values of y
+X = cbind(rep(1,n-10),y[2:(n-9)])  ## X matrix of 1000 ones and lagged values of y (t-1)
+beta = solve(t(X)%*%X)%*%t(X)%*%Y  ## solving for coefficient
+cat("Parameter Estimates: \n", beta)
+```
+```{r}
+steps = 10
+phiHatAR = beta[2]
+muHatAR = beta[1]/(1-phiHatAR)
+yHatAR = rep(NA,steps)
+yHatAR[1] =  muHatAR + phiHatAR*(y[1000]-muHatAR) 
+yHatAR[2] =  muHatAR + phiHatAR*(yHat[1]-muHatAR)
+for(s in 3:steps){
+  yHatAR[s] = muHatAR + phiHatAR*(yHatAR[s-1]-muHatAR)
+}
+cat("Forecast: \n", yHat)
+```
+
+### c. (15 points)
+Compute the theoretical MSE values for the forecasts associated with $s=1,\ldots,10$, using both the $ARMA(1,1)$ and $AR(1)$ parameter estimates.
+
+#### Solution:
+
+```{r}
+
+## calculating psi coefficients for MA infinite representation of ARMA(1,1)
+ARMApsi = ARMAtoMA(arma11Est$coef[1], arma11Est$coef[2], 1)
+
+ar1Est = arima(y[1:1000],order=c(1,0,0))
+
+ARMAmse = matrix(NA,10,1)
+ARmse = matrix(NA,10,1)
+
+for (i in 1:10) {
+  ## calculating theoretical MSE for ARMA(1,1)
+  ARMAmse[i,] = var(arma11Est$residuals)*sum(ARMApsi^(2*i))
+  ## calculating theoretical MSE for AR(1)
+  ARmse[i,] = var(ar1Est$residuals)*sum(beta[2]^(2*i))
+}
+cat("Theoretical MSE for forecast using ARMA(1,1) \n", ARMAmse)
+cat("\nTheoretical MSE for forecast using AR(1) \n", ARmse)
+
+
+
+```
+
+### d. (25 points)
+Simulate 100 new datasets of size $n=1010$. For each dataset, estimate the $ARMA(1,1)$ and $AR(1)$ models using the first $1000$ observations and compute the forecasts for $s=1,\ldots,10$. Compute the forecast errors for each set of forecasts (using the true values that you simulated), and compute the sample MSEs of your forecasts.
+
+#### Solution:
+
+```{r error=FALSE, warning=FALSE, message=FALSE}
+
+n = 1010
+cc = 3.2
+phi = 0.86
+theta = -1.4
+
+steps = 10
+
+ARMAmse = matrix(NA, 100, 1)
+ARmse = matrix(NA, 100, 1)
+
+for(j in 1:100) {
+  ## simulation
+  eps = rnorm(n,0,1)
+  y = rep(NA,n)
+  y[1] = cc + phi*cc/(1-phi)
+  for(i in 2:n){
+    y[i] = cc + phi*y[i-1] + eps[i] + theta*eps[i-1]
+  }
+  
+  ## ARMA(1,1)
+  arma11Est = arima(y[1:1000],order=c(1,0,1))
+
+  muHat = arma11Est$coef[3]
+  phiHat = arma11Est$coef[1]
+  thetaHat = arma11Est$coef[2]
+  
+  yHat = rep(NA,steps)
+  yHat[1] =  muHat + phiHat*(y[1000]-muHat) + thetaHat*eps[1000]
+  for(s in 2:steps){
+    yHat[s] = muHat + phiHat*(yHat[s-1]-muHat)
+  }
+  ARMAmse[j,1] = mean((yHat-y[1000:steps])^2)
+
+  ## AR(1)
+  Y = y[1:(n-10)] ## first 1000 simulated values of y
+  X = cbind(rep(1,n-10),y[2:(n-9)])  ## X matrix of 1000 ones and lagged values of y (t-1)
+  beta = solve(t(X)%*%X)%*%t(X)%*%Y  ## solving for coefficient
+
+  phiHatAR = beta[2]
+  muHatAR = beta[1]/(1-phiHatAR)
+  yHatAR = rep(NA,steps)
+  yHatAR[1] =  muHatAR + phiHatAR*(y[1000]-muHatAR) 
+  yHatAR[2] =  muHatAR + phiHatAR*(yHat[1]-muHatAR)
+  for(s in 3:steps){
+    yHatAR[s] = muHatAR + phiHatAR*(yHatAR[s-1]-muHatAR)
+  }
+  ARmse[j,1] = mean((yHatAR-y[1000:steps])^2)
+}
+cat("ARMA(1,1) MSE Values: \n", ARMAmse, "\nAR(1) MSE Values: \n", ARmse)
+```
+
+# Question 2
+Download daily 1-year and 10-year U.S. Treasury yield data for the period May 21, 2013 - May 20, 2018.
+
+```{r warning=FALSE, message=FALSE}
+library(Quandl)
+library(vars)
+treasury = Quandl("USTREASURY/YIELD",start_date="2013-05-21",end_date="2018-05-20",type="xts")
+treasury <-  as.data.frame(treasury)
+```
+
+### a. (10 points)
+Estimate a bivariate $VAR$ for the log interest rates. Report your parameter estimates and provide some interpretation.
+
+#### Solution:
+
+```{r}
+treasury <- treasury[,c(4,9)]
+treasury <- log(treasury)
+varEst <- VAR(treasury, p=1)
+coef(varEst)
+```
+The estimated VAR suggests that the lagged (by a single time period) values of 1-year and 10-year treasury log interest rates increase the next period's 1-year log rate by 0.9989 and -0.0111 points respectively if they both equal 1. These increases are to a constant of 0.0106. However, the p-value on the lagged 10-year term is quite large.
+
+They also increase the next period's 10-year log rate by -2.51e-05 and 9.93e-01 respectively if they are equal to 1. These increases are to a constant of 5.755e-03. The p-value on the lagged 1-year term is very large. 
+
+### b. (15 points)
+Compute and report the impulse response functions of the fitted $VAR$ model.
+
+#### Solution:
+
+```{r}
+#varFit <- fitted(varEst)
+irf(varEst, n.ahead=15, ortho = FALSE, boot=FALSE)
+```
+
+### c. (15 points)
+Use the fitted $VAR$ model to compute and report 15-step forecasts for the two series.
+
+#### Solution:
+
+```{r}
+predict(varEst, n.ahead=15)
+```
